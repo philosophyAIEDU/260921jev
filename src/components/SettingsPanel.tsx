@@ -27,7 +27,17 @@ export function SettingsPanel({
   onAddTemplate,
   onRemoveTemplate,
 }: SettingsPanelProps) {
-  const { jevApiKey, setJevApiKey, geminiApiKey, setGeminiApiKey } = useApiKeys();
+  const {
+    jevApiKey,
+    setJevApiKey,
+    geminiApiKey,
+    setGeminiApiKey,
+    rememberJevKey,
+    setRememberJevKey,
+    rememberGeminiKey,
+    setRememberGeminiKey,
+    clearKeys,
+  } = useApiKeys();
   const gmail = useGmailAuth();
   const [showJevKey, setShowJevKey] = useState(false);
   const [showGeminiKey, setShowGeminiKey] = useState(false);
@@ -72,9 +82,12 @@ export function SettingsPanel({
         <div className="notice-banner danger" style={{ marginBottom: 16 }}>
           <AlertTriangleIcon />
           <div>
-            API Key는 이 탭의 메모리에서만 유지되며 저장소·로그에 남지 않습니다. 새로고침하면
-            사라집니다. <strong>공용 컴퓨터에서는 키를 입력하지 마세요.</strong> 또한 실제
-            고객의 개인정보가 포함된 데이터는 이 데모 앱에 입력하지 않는 것을 권장합니다.
+            API Key는 기본적으로 이 탭의 메모리에서만 유지되며 서버·로그에는 절대 남지
+            않습니다. 아래에서 <strong>"이 브라우저에 저장"</strong>을 직접 켜지 않는 한
+            새로고침하면 사라집니다. 켜면 이 기기에서만 복호화할 수 있는 암호화된 형태로
+            브라우저에 남지만, 이 브라우저 프로필에 접근할 수 있는 사람이라면 누구나 볼 수
+            있다는 점은 같습니다. <strong>공용·공유 컴퓨터에서는 절대 켜지 마세요.</strong> 또한
+            실제 고객의 개인정보가 포함된 데이터는 이 데모 앱에 입력하지 않는 것을 권장합니다.
           </div>
         </div>
 
@@ -104,6 +117,14 @@ export function SettingsPanel({
               </button>
             </div>
             <TestStatus test={jevTest} />
+            <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12.5, marginTop: 6 }}>
+              <input
+                type="checkbox"
+                checked={rememberJevKey}
+                onChange={(e) => setRememberJevKey(e.target.checked)}
+              />
+              이 브라우저에 저장 (암호화, 다음에 다시 입력하지 않아도 됨)
+            </label>
           </div>
 
           <div className="form-row">
@@ -131,7 +152,21 @@ export function SettingsPanel({
               </button>
             </div>
             <TestStatus test={geminiTest} />
+            <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12.5, marginTop: 6 }}>
+              <input
+                type="checkbox"
+                checked={rememberGeminiKey}
+                onChange={(e) => setRememberGeminiKey(e.target.checked)}
+              />
+              이 브라우저에 저장 (암호화, 다음에 다시 입력하지 않아도 됨)
+            </label>
           </div>
+
+          {(rememberJevKey || rememberGeminiKey) && (
+            <button type="button" className="btn btn-danger btn-sm" onClick={clearKeys}>
+              저장된 키 모두 지우기
+            </button>
+          )}
         </section>
 
         <section style={{ marginBottom: 20 }}>
@@ -287,9 +322,9 @@ export function SettingsPanel({
               disabled={gmail.isConnected}
             />
             <div className="form-hint">
-              Google Cloud Console에서 발급받은 값입니다 (비밀값이 아니라 공개 가능한 ID). 발급
-              방법은 README를 참고하세요.
+              Google Cloud Console에서 발급받은 값입니다 (비밀값이 아니라 공개 가능한 ID).
             </div>
+            <GmailOAuthGuide />
           </div>
 
           {gmail.isConnected ? (
@@ -424,6 +459,54 @@ function TemplateManager({
         템플릿 추가
       </button>
     </div>
+  );
+}
+
+function GmailOAuthGuide() {
+  return (
+    <details style={{ marginTop: 8 }}>
+      <summary style={{ cursor: "pointer", fontSize: 12.5, color: "var(--text-secondary)", fontWeight: 600 }}>
+        Google OAuth 클라이언트 ID는 어떻게 발급받나요?
+      </summary>
+      <ol style={{ fontSize: 12.5, lineHeight: 1.7, paddingLeft: 18, marginTop: 8, marginBottom: 0 }}>
+        <li>
+          <a
+            href="https://console.cloud.google.com/"
+            target="_blank"
+            rel="noreferrer"
+            style={{ color: "var(--choice-color)", textDecoration: "underline" }}
+          >
+            Google Cloud Console
+          </a>
+          에서 새 프로젝트를 만들거나 기존 프로젝트를 선택합니다.
+        </li>
+        <li>
+          "API 및 서비스 → 라이브러리"에서 <strong>Gmail API</strong>를 검색해 사용 설정합니다.
+        </li>
+        <li>
+          "API 및 서비스 → OAuth 동의 화면"에서 User Type을 "외부"로 선택하고 앱 이름 등 기본
+          정보를 입력합니다. 테스트 단계에서는 "테스트 사용자"에 본인 Gmail 주소를 추가해야
+          로그인할 수 있습니다.
+        </li>
+        <li>
+          "API 및 서비스 → 사용자 인증 정보 → 사용자 인증 정보 만들기 → OAuth 클라이언트
+          ID"를 선택하고, 애플리케이션 유형은 <strong>"웹 애플리케이션"</strong>을 선택합니다.
+        </li>
+        <li>
+          "승인된 자바스크립트 원본"에 지금 이 앱이 실행되는 주소를 그대로 추가합니다 (예:{" "}
+          <code>http://localhost:8888</code> 또는 배포된 <code>https://내사이트.netlify.app</code>
+          ). 리디렉션 URI는 따로 설정하지 않아도 됩니다.
+        </li>
+        <li>
+          생성된 클라이언트 ID(<code>xxxxxxxx.apps.googleusercontent.com</code> 형태)를 복사해
+          위 입력란에 붙여넣고 "Google 계정 연결"을 누르세요.
+        </li>
+      </ol>
+      <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8, marginBottom: 0 }}>
+        앱이 "테스트" 상태인 동안에는 3번에서 등록한 테스트 사용자 계정으로만 로그인할 수
+        있습니다. 더 자세한 설명은 README 11장을 참고하세요.
+      </p>
+    </details>
   );
 }
 
