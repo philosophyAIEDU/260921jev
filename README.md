@@ -15,6 +15,7 @@
   - 문의 유형(category), 감정(sentiment), 긴급 여부(is_urgent), 사람 검토 필요(needs_human_review), 답변 필요 여부(needs_reply), 심각도(severity)
 - Gemini 3.5 Flash-Lite로 한국어 답변 초안 자동 생성 (수정·승인·보류·재생성 가능)
 - 임계값 기반 정책 엔진 (긴급/사람 검토/낮은 confidence/높은 심각도 자동 판정)
+- **API 비용 절감을 위한 분석 건수 선택**: 미리보기 화면에서 10/20/50/100건 또는 직접 입력한 건수만 먼저 분석하고, 결과를 확인한 뒤 "다음 N건 이어서 분석"으로 나머지를 처리
 - 동시성 제한 + 지수 백오프 + 중단/재시도가 가능한 분석 파이프라인
 - CSV(UTF-8 BOM)·Excel 내보내기
 - **Jev 학습 모드**: Noul/Choice/Score 개념 설명, 질문 설계 화면, State→Questions→Answers 흐름 시각화, 원본 요청/응답 JSON 보기, 한 건 직접 실습, 학습 확인 퀴즈
