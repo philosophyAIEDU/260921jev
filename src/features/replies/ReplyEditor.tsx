@@ -1,5 +1,7 @@
 import type { InquiryRecord } from "../../types/pipeline";
-import { AlertTriangleIcon, CheckCircleIcon } from "../../components/icons";
+import type { ReplyTemplate } from "../../types/template";
+import { isValidEmail } from "../../types/inquiry";
+import { AlertTriangleIcon, CheckCircleIcon, XCircleIcon } from "../../components/icons";
 
 interface ReplyEditorProps {
   record: InquiryRecord;
@@ -9,6 +11,9 @@ interface ReplyEditorProps {
   onHold: () => void;
   onRegenerate: () => void;
   regenerating: boolean;
+  templates: ReplyTemplate[];
+  gmailConnected: boolean;
+  onSendEmail: () => void;
 }
 
 export function ReplyEditor({
@@ -19,6 +24,9 @@ export function ReplyEditor({
   onHold,
   onRegenerate,
   regenerating,
+  templates,
+  gmailConnected,
+  onSendEmail,
 }: ReplyEditorProps) {
   if (record.policy?.shouldSkipReply) {
     return (
@@ -43,6 +51,15 @@ export function ReplyEditor({
   }
 
   const replyText = record.editedReply ?? record.geminiReply.reply;
+  const category = record.jevResult?.category.choice;
+  const availableTemplates = templates.filter((t) => t.category === "all" || t.category === category);
+
+  function insertTemplate(templateId: string) {
+    const template = templates.find((t) => t.id === templateId);
+    if (!template) return;
+    const next = replyText.trim() ? `${replyText.trim()}\n${template.text}` : template.text;
+    onEditReply(next);
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -56,6 +73,26 @@ export function ReplyEditor({
         <div className="notice-banner danger">
           <AlertTriangleIcon />
           <div>Gemini JSON 파싱에 실패하여 원문 텍스트를 그대로 표시합니다.</div>
+        </div>
+      )}
+
+      {availableTemplates.length > 0 && (
+        <div className="form-row" style={{ marginBottom: 0 }}>
+          <label>빠른 답변 템플릿 삽입</label>
+          <select
+            value=""
+            onChange={(e) => {
+              if (e.target.value) insertTemplate(e.target.value);
+              e.target.value = "";
+            }}
+          >
+            <option value="">템플릿 선택...</option>
+            {availableTemplates.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.label}
+              </option>
+            ))}
+          </select>
         </div>
       )}
 
@@ -87,6 +124,46 @@ export function ReplyEditor({
 
       {record.approval === "approved" && <span className="badge badge-success">승인됨</span>}
       {record.approval === "held" && <span className="badge badge-warning">보류됨</span>}
+
+      {gmailConnected && <EmailSendSection record={record} onSendEmail={onSendEmail} />}
+    </div>
+  );
+}
+
+function EmailSendSection({ record, onSendEmail }: { record: InquiryRecord; onSendEmail: () => void }) {
+  const hasEmail = isValidEmail(record.inquiry.customer_email);
+  const sending = record.emailSendStatus === "sending";
+
+  return (
+    <div style={{ borderTop: "1px solid var(--border-subtle)", paddingTop: 10, marginTop: 2 }}>
+      {!hasEmail ? (
+        <p className="text-muted" style={{ fontSize: 12.5 }}>
+          고객 이메일 주소가 없어 발송할 수 없습니다. (열 매핑에서 "고객 이메일"을 지정하세요)
+        </p>
+      ) : (
+        <>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={onSendEmail} disabled={sending}>
+            {sending ? "발송 중..." : `${record.inquiry.customer_email}로 이메일 발송`}
+          </button>
+          {record.emailSendStatus === "sent" && (
+            <div
+              className="form-hint"
+              style={{ color: "var(--emerald-600)", display: "flex", gap: 4, alignItems: "center", marginTop: 6 }}
+            >
+              <CheckCircleIcon />
+              발송 완료{record.emailSentAt ? ` (${new Date(record.emailSentAt).toLocaleString("ko-KR")})` : ""}
+            </div>
+          )}
+          {record.emailSendStatus === "failed" && record.emailError && (
+            <div
+              className="form-hint"
+              style={{ color: "var(--color-danger)", display: "flex", gap: 4, alignItems: "center", marginTop: 6 }}
+            >
+              <XCircleIcon /> {record.emailError}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

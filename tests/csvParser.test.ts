@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseCsvText } from "../src/lib/fileParsers/csvParser";
 import { rowsToInquiries } from "../src/lib/fileParsers/rowsToInquiries";
+import { isValidEmail } from "../src/types/inquiry";
 
 describe("parseCsvText - 한글 CSV 파싱", () => {
   it("한글 헤더와 값을 깨짐 없이 파싱한다", () => {
@@ -36,6 +37,21 @@ describe("parseCsvText - 한글 CSV 파싱", () => {
     const result = parseCsvText(csv);
     expect(result.rows).toHaveLength(2);
     expect(result.suggestedMapping.inquiry_text).toBe("inquiry_text");
+  });
+
+  it("고객 이메일 열을 자동으로 인식한다", () => {
+    const csv = ["문의내용,이메일", '"배송 문의",customer@example.com'].join("\n");
+    const result = parseCsvText(csv);
+    expect(result.suggestedMapping.customer_email).toBe("이메일");
+  });
+});
+
+describe("isValidEmail", () => {
+  it("올바른 이메일 형식만 통과시킨다", () => {
+    expect(isValidEmail("customer@example.com")).toBe(true);
+    expect(isValidEmail("잘못된주소")).toBe(false);
+    expect(isValidEmail(undefined)).toBe(false);
+    expect(isValidEmail("")).toBe(false);
   });
 });
 

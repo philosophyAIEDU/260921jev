@@ -13,6 +13,8 @@ export type RowStatus =
 
 export type ReplyApprovalStatus = "pending" | "approved" | "held" | "skipped";
 
+export type EmailSendStatus = "idle" | "sending" | "sent" | "failed";
+
 export interface InquiryRecord {
   inquiry: ParsedInquiry;
   status: RowStatus;
@@ -26,4 +28,14 @@ export interface InquiryRecord {
   editedReply?: string;
   internalMemo?: string;
   errorMessage?: string;
+  /** 세션 캐시(동일 문의 재분석 방지)에서 가져온 결과인지 여부 */
+  fromCache?: boolean;
+  /** 담당자 배정 (자유 입력, 별도 로그인 시스템 없음) */
+  assignee?: string;
+  /** 이메일 자동/수동 발송 상태 */
+  emailSendStatus?: EmailSendStatus;
+  emailSentAt?: string;
+  emailError?: string;
+  /** 목록에서 일괄 처리를 위해 선택되었는지 여부 (UI 상태) */
+  selected?: boolean;
 }

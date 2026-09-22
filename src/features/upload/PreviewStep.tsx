@@ -12,6 +12,7 @@ const MAPPING_FIELDS: { key: keyof ColumnMapping; label: string; required?: bool
   { key: "received_at", label: "접수일시" },
   { key: "channel", label: "채널" },
   { key: "customer_name", label: "고객명" },
+  { key: "customer_email", label: "고객 이메일" },
   { key: "order_id", label: "주문번호" },
   { key: "language", label: "언어" },
 ];

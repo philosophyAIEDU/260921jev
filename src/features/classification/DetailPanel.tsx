@@ -1,7 +1,9 @@
 import { useState, type ReactNode } from "react";
 import type { InquiryRecord } from "../../types/pipeline";
 import type { AppMode } from "../../components/Header";
+import type { ReplyTemplate } from "../../types/template";
 import { StatusBadge } from "../../components/StatusBadge";
+import { ElapsedBadge } from "../../components/ElapsedBadge";
 import { JsonView } from "../../components/JsonView";
 import { ChoiceResultView, NoulResultView, ScoreResultView } from "./resultViews";
 import { ReplyEditor } from "../replies/ReplyEditor";
@@ -16,6 +18,11 @@ interface DetailPanelProps {
   onHold: () => void;
   onRegenerate: () => void;
   regenerating: boolean;
+  onSetAssignee: (assignee: string) => void;
+  slaWarningHours: number;
+  templates: ReplyTemplate[];
+  gmailConnected: boolean;
+  onSendEmail: () => void;
 }
 
 type LearningTab = "simple" | "jev-request" | "jev-response" | "gemini-request" | "final-reply";
@@ -31,16 +38,38 @@ export function DetailPanel(props: DetailPanelProps) {
 
   return (
     <div className="card">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10, flexWrap: "wrap", gap: 10 }}>
         <div>
           <h2 className="card-title" style={{ marginBottom: 4 }}>
             문의 상세
           </h2>
-          <div className="text-muted" style={{ fontSize: 12.5 }}>
-            {record.inquiry.inquiry_id ?? record.inquiry.rowKey} · {record.inquiry.channel ?? "채널 미상"}
+          <div className="text-muted" style={{ fontSize: 12.5, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <span>
+              {record.inquiry.inquiry_id ?? record.inquiry.rowKey} · {record.inquiry.channel ?? "채널 미상"}
+            </span>
+            <ElapsedBadge
+              receivedAt={record.inquiry.received_at}
+              warningHours={props.slaWarningHours}
+              isResolved={record.status === "done" || record.approval === "approved"}
+            />
           </div>
         </div>
-        <StatusBadge status={record.status} />
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div className="form-row" style={{ margin: 0 }}>
+            <label htmlFor="assignee-input" style={{ fontSize: 11.5 }}>
+              담당자
+            </label>
+            <input
+              id="assignee-input"
+              type="text"
+              value={record.assignee ?? ""}
+              onChange={(e) => props.onSetAssignee(e.target.value)}
+              placeholder="미배정"
+              style={{ width: 140 }}
+            />
+          </div>
+          <StatusBadge status={record.status} />
+        </div>
       </div>
 
       {record.errorMessage && (
@@ -156,6 +185,9 @@ export function DetailPanel(props: DetailPanelProps) {
               onHold={props.onHold}
               onRegenerate={props.onRegenerate}
               regenerating={props.regenerating}
+              templates={props.templates}
+              gmailConnected={props.gmailConnected}
+              onSendEmail={props.onSendEmail}
             />
           </div>
         </div>

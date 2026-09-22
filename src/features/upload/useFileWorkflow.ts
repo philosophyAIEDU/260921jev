@@ -40,6 +40,7 @@ const EMPTY_MAPPING: ColumnMapping = {
   received_at: null,
   channel: null,
   customer_name: null,
+  customer_email: null,
   order_id: null,
   inquiry_text: null,
   language: null,

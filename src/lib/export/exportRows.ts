@@ -7,6 +7,7 @@ export interface ExportRow {
   received_at: string;
   channel: string;
   customer_name: string;
+  customer_email: string;
   order_id: string;
   inquiry_text: string;
   category: string;
@@ -21,6 +22,9 @@ export interface ExportRow {
   generated_reply: string;
   internal_note: string;
   status: string;
+  assignee: string;
+  email_sent_status: string;
+  email_sent_at: string;
   error_message: string;
 }
 
@@ -30,6 +34,7 @@ export function toExportRows(records: InquiryRecord[]): ExportRow[] {
     received_at: r.inquiry.received_at ?? "",
     channel: r.inquiry.channel ?? "",
     customer_name: r.inquiry.customer_name ?? "",
+    customer_email: r.inquiry.customer_email ?? "",
     order_id: r.inquiry.order_id ?? "",
     inquiry_text: r.inquiry.inquiry_text,
     category: r.jevResult?.category.choice ?? "",
@@ -44,6 +49,9 @@ export function toExportRows(records: InquiryRecord[]): ExportRow[] {
     generated_reply: r.editedReply ?? r.geminiReply?.reply ?? "",
     internal_note: r.geminiReply?.internal_note ?? "",
     status: r.status,
+    assignee: r.assignee ?? "",
+    email_sent_status: r.emailSendStatus ?? "",
+    email_sent_at: r.emailSentAt ?? "",
     error_message: r.errorMessage ?? "",
   }));
 }

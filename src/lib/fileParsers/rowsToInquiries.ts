@@ -40,6 +40,7 @@ export function rowsToInquiries(
       received_at: get("received_at"),
       channel: get("channel"),
       customer_name: get("customer_name"),
+      customer_email: get("customer_email"),
       order_id: get("order_id"),
       inquiry_text: trimmedText,
       language: get("language"),

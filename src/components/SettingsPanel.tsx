@@ -1,19 +1,34 @@
 import { useState } from "react";
 import { useApiKeys } from "../lib/apiKeyContext";
+import { useGmailAuth } from "../lib/gmail/gmailAuthContext";
 import { testConnection } from "../lib/api/geminiClient";
 import type { AppSettings, ReplyTone } from "../types/settings";
+import type { ReplyTemplate } from "../types/template";
+import { INQUIRY_CATEGORIES } from "../types/jev";
+import { labelFor } from "../features/classification/resultViews";
 import { AlertTriangleIcon, CheckCircleIcon, XCircleIcon } from "./icons";
 
 interface SettingsPanelProps {
   settings: AppSettings;
   onChange: (settings: AppSettings) => void;
   onClose: () => void;
+  templates: ReplyTemplate[];
+  onAddTemplate: (template: Omit<ReplyTemplate, "id">) => void;
+  onRemoveTemplate: (id: string) => void;
 }
 
 type TestState = "idle" | "testing" | "success" | "failed";
 
-export function SettingsPanel({ settings, onChange, onClose }: SettingsPanelProps) {
+export function SettingsPanel({
+  settings,
+  onChange,
+  onClose,
+  templates,
+  onAddTemplate,
+  onRemoveTemplate,
+}: SettingsPanelProps) {
   const { jevApiKey, setJevApiKey, geminiApiKey, setGeminiApiKey } = useApiKeys();
+  const gmail = useGmailAuth();
   const [showJevKey, setShowJevKey] = useState(false);
   const [showGeminiKey, setShowGeminiKey] = useState(false);
   const [jevTest, setJevTest] = useState<{ state: TestState; message?: string }>({ state: "idle" });
@@ -206,6 +221,25 @@ export function SettingsPanel({ settings, onChange, onClose }: SettingsPanelProp
           </div>
         </section>
 
+        <section style={{ marginBottom: 20 }}>
+          <h3 className="card-title" style={{ fontSize: 14 }}>
+            SLA
+          </h3>
+          <div className="form-row" style={{ maxWidth: 220 }}>
+            <label>미처리 경과 강조 기준 (시간)</label>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              value={settings.slaWarningHours}
+              onChange={(e) => patch({ slaWarningHours: Number(e.target.value) })}
+            />
+            <div className="form-hint">
+              접수일시 기준으로 이 시간이 지나도 완료/승인되지 않으면 목록에서 강조 표시합니다.
+            </div>
+          </div>
+        </section>
+
         <section>
           <h3 className="card-title" style={{ fontSize: 14 }}>
             자동 답변 범위
@@ -227,7 +261,168 @@ export function SettingsPanel({ settings, onChange, onClose }: SettingsPanelProp
             긍정 후기(compliment)에 자동 답변을 생성합니다
           </label>
         </section>
+
+        <section style={{ marginTop: 20 }}>
+          <h3 className="card-title" style={{ fontSize: 14 }}>
+            Gmail 자동 발송 (선택)
+          </h3>
+          <div className="notice-banner danger" style={{ marginBottom: 12 }}>
+            <AlertTriangleIcon />
+            <div>
+              연결하면 <strong>사람 검토가 필요 없다고 판정된 문의</strong>는 답변 생성과 동시에
+              실제 고객 이메일로 자동 발송됩니다. 결제·환불·안전·개인정보 등 사람 검토가 필요한
+              문의는 이 설정과 무관하게 항상 수동 발송만 가능합니다. 실제 고객 데이터로 테스트할
+              때는 특히 주의하세요.
+            </div>
+          </div>
+
+          <div className="form-row">
+            <label htmlFor="gmail-client-id">Google OAuth 클라이언트 ID</label>
+            <input
+              id="gmail-client-id"
+              type="text"
+              value={settings.gmailClientId}
+              onChange={(e) => patch({ gmailClientId: e.target.value })}
+              placeholder="xxxxxxxx.apps.googleusercontent.com"
+              disabled={gmail.isConnected}
+            />
+            <div className="form-hint">
+              Google Cloud Console에서 발급받은 값입니다 (비밀값이 아니라 공개 가능한 ID). 발급
+              방법은 README를 참고하세요.
+            </div>
+          </div>
+
+          {gmail.isConnected ? (
+            <div className="form-row">
+              <div
+                className="form-hint"
+                style={{ color: "var(--emerald-600)", display: "flex", gap: 4, alignItems: "center", marginBottom: 8 }}
+              >
+                <CheckCircleIcon /> {gmail.connectedEmail} 계정으로 연결됨
+              </div>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={gmail.disconnect}>
+                연결 해제
+              </button>
+            </div>
+          ) : (
+            <div className="form-row">
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => gmail.connect(settings.gmailClientId)}
+                disabled={gmail.connecting || !settings.gmailClientId.trim()}
+              >
+                {gmail.connecting ? "연결 중..." : "Google 계정 연결"}
+              </button>
+              {gmail.error && (
+                <div
+                  className="form-hint"
+                  style={{ color: "var(--color-danger)", display: "flex", gap: 4, alignItems: "center", marginTop: 6 }}
+                >
+                  <XCircleIcon /> {gmail.error}
+                </div>
+              )}
+            </div>
+          )}
+
+          <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13.5, marginTop: 4 }}>
+            <input
+              type="checkbox"
+              checked={settings.autoSendEmail}
+              disabled={!gmail.isConnected}
+              onChange={(e) => patch({ autoSendEmail: e.target.checked })}
+            />
+            사람 검토가 필요 없는 문의는 Gemini 답변 생성과 동시에 자동으로 이메일을 발송합니다
+          </label>
+        </section>
+
+        <section style={{ marginTop: 20 }}>
+          <h3 className="card-title" style={{ fontSize: 14 }}>
+            빠른 답변 템플릿
+          </h3>
+          <p className="card-subtitle">
+            답변 편집기에서 바로 삽입할 수 있는 문구입니다. 브라우저에 저장되며 API Key처럼
+            민감한 정보가 아니므로 다음에 접속해도 유지됩니다.
+          </p>
+          <TemplateManager templates={templates} onAdd={onAddTemplate} onRemove={onRemoveTemplate} />
+        </section>
       </div>
+    </div>
+  );
+}
+
+function TemplateManager({
+  templates,
+  onAdd,
+  onRemove,
+}: {
+  templates: ReplyTemplate[];
+  onAdd: (template: Omit<ReplyTemplate, "id">) => void;
+  onRemove: (id: string) => void;
+}) {
+  const [label, setLabel] = useState("");
+  const [category, setCategory] = useState<ReplyTemplate["category"]>("all");
+  const [text, setText] = useState("");
+
+  function submit() {
+    if (!label.trim() || !text.trim()) return;
+    onAdd({ label: label.trim(), category, text: text.trim() });
+    setLabel("");
+    setText("");
+    setCategory("all");
+  }
+
+  return (
+    <div>
+      {templates.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
+          {templates.map((t) => (
+            <div
+              key={t.id}
+              className="card"
+              style={{ padding: 10, display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}
+            >
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 13 }}>
+                  {t.label}{" "}
+                  <span className="badge badge-neutral">{t.category === "all" ? "전체" : labelFor(t.category)}</span>
+                </div>
+                <div className="text-muted" style={{ fontSize: 12.5, marginTop: 2 }}>
+                  {t.text}
+                </div>
+              </div>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => onRemove(t.id)}>
+                삭제
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="grid grid-2">
+        <div className="form-row">
+          <label>템플릿 이름</label>
+          <input type="text" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="예: 배송 지연 안내" />
+        </div>
+        <div className="form-row">
+          <label>적용 유형</label>
+          <select value={category} onChange={(e) => setCategory(e.target.value as ReplyTemplate["category"])}>
+            <option value="all">전체</option>
+            {INQUIRY_CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {labelFor(c)}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <div className="form-row">
+        <label>문구</label>
+        <textarea rows={2} value={text} onChange={(e) => setText(e.target.value)} />
+      </div>
+      <button type="button" className="btn btn-secondary btn-sm" onClick={submit} disabled={!label.trim() || !text.trim()}>
+        템플릿 추가
+      </button>
     </div>
   );
 }

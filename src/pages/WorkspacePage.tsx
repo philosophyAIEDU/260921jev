@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import type { InquiryRecord } from "../types/pipeline";
+import type { AppSettings } from "../types/settings";
 import type { AppMode } from "../components/Header";
+import type { ReplyTemplate } from "../types/template";
 import { Dashboard } from "../features/classification/Dashboard";
 import { FilterBar } from "../features/classification/FilterBar";
 import { InquiryTable } from "../features/classification/InquiryTable";
@@ -9,10 +11,11 @@ import { filterRecords } from "../features/classification/filterRecords";
 import { DEFAULT_FILTERS } from "../features/classification/filterTypes";
 import { FlowDiagram } from "../features/learning/FlowDiagram";
 import { exportToCsv, exportToExcel } from "../lib/export/exportRows";
-import { AlertTriangleIcon } from "../components/icons";
+import { AlertTriangleIcon, CheckCircleIcon } from "../components/icons";
 
 interface WorkspaceProps {
   mode: AppMode;
+  settings: AppSettings;
   records: InquiryRecord[];
   running: boolean;
   pendingCount: number;
@@ -25,12 +28,19 @@ interface WorkspaceProps {
   onEditReply: (rowKey: string, text: string) => void;
   onEditMemo: (rowKey: string, text: string) => void;
   onSetApproval: (rowKey: string, approval: "approved" | "held") => void;
+  onBulkSetApproval: (rowKeys: string[], approval: "approved" | "held") => void;
+  onSetAssignee: (rowKey: string, assignee: string) => void;
+  templates: ReplyTemplate[];
+  gmailConnected: boolean;
+  onSendEmail: (rowKey: string) => void;
+  onBulkSendEmail: (rowKeys: string[]) => void;
 }
 
 export function WorkspacePage(props: WorkspaceProps) {
-  const { records, mode } = props;
+  const { records, mode, settings } = props;
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [selectedRowKeys, setSelectedRowKeys] = useState<Set<string>>(new Set());
 
   const filtered = useMemo(() => filterRecords(records, filters), [records, filters]);
   const selected = records.find((r) => r.inquiry.rowKey === selectedKey) ?? null;
@@ -39,6 +49,39 @@ export function WorkspacePage(props: WorkspaceProps) {
   const inProgressCount = records.filter((r) => r.status === "analyzing" || r.status === "generating_reply").length;
   const failedCount = records.filter((r) => r.status === "failed").length;
   const doneCount = records.length - waitingCount - inProgressCount;
+  const cachedCount = records.filter((r) => r.fromCache).length;
+
+  function toggleRow(rowKey: string) {
+    setSelectedRowKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(rowKey)) next.delete(rowKey);
+      else next.add(rowKey);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    setSelectedRowKeys((prev) => {
+      const allSelected = filtered.length > 0 && filtered.every((r) => prev.has(r.inquiry.rowKey));
+      if (allSelected) return new Set();
+      return new Set(filtered.map((r) => r.inquiry.rowKey));
+    });
+  }
+
+  function bulkApply(approval: "approved" | "held") {
+    props.onBulkSetApproval([...selectedRowKeys], approval);
+    setSelectedRowKeys(new Set());
+  }
+
+  function handleBulkSend() {
+    const keys = [...selectedRowKeys];
+    const confirmed = window.confirm(
+      `선택한 ${keys.length}건 중 이메일 주소와 답변이 준비된 문의에 실제 이메일을 발송합니다. 계속할까요?`
+    );
+    if (!confirmed) return;
+    props.onBulkSendEmail(keys);
+    setSelectedRowKeys(new Set());
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -51,6 +94,7 @@ export function WorkspacePage(props: WorkspaceProps) {
             <p className="card-subtitle" style={{ marginBottom: 0 }}>
               완료 {doneCount} / 이번 배치 {records.length} (진행 중 {inProgressCount}, 실패{" "}
               {failedCount})
+              {cachedCount > 0 && ` · 중복 문의 재사용으로 API 호출 ${cachedCount}건 절약`}
               {props.pendingCount > 0 && ` · 대기 중 ${props.pendingCount}건 (미분석, 비용 발생 안 함)`}
             </p>
           </div>
@@ -100,7 +144,41 @@ export function WorkspacePage(props: WorkspaceProps) {
         <div style={{ marginBottom: 12 }}>
           <FilterBar filters={filters} onChange={setFilters} />
         </div>
-        <InquiryTable records={filtered} selectedKey={selectedKey} onSelect={setSelectedKey} />
+
+        {selectedRowKeys.size > 0 && (
+          <div className="notice-banner info" style={{ marginBottom: 12, justifyContent: "space-between" }}>
+            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              <CheckCircleIcon />
+              <span>{selectedRowKeys.size}건 선택됨</span>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button type="button" className="btn btn-primary btn-sm" onClick={() => bulkApply("approved")}>
+                일괄 승인
+              </button>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => bulkApply("held")}>
+                일괄 보류
+              </button>
+              {props.gmailConnected && (
+                <button type="button" className="btn btn-danger btn-sm" onClick={handleBulkSend}>
+                  선택 항목 일괄 이메일 발송
+                </button>
+              )}
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setSelectedRowKeys(new Set())}>
+                선택 해제
+              </button>
+            </div>
+          </div>
+        )}
+
+        <InquiryTable
+          records={filtered}
+          selectedKey={selectedKey}
+          onSelect={setSelectedKey}
+          slaWarningHours={settings.slaWarningHours}
+          selectedRowKeys={selectedRowKeys}
+          onToggleRow={toggleRow}
+          onToggleAll={toggleAll}
+        />
       </div>
 
       {selected ? (
@@ -115,6 +193,11 @@ export function WorkspacePage(props: WorkspaceProps) {
             onHold={() => props.onSetApproval(selected.inquiry.rowKey, "held")}
             onRegenerate={() => props.onRegenerateReply(selected.inquiry.rowKey)}
             regenerating={props.regeneratingKey === selected.inquiry.rowKey}
+            onSetAssignee={(assignee) => props.onSetAssignee(selected.inquiry.rowKey, assignee)}
+            slaWarningHours={settings.slaWarningHours}
+            templates={props.templates}
+            gmailConnected={props.gmailConnected}
+            onSendEmail={() => props.onSendEmail(selected.inquiry.rowKey)}
           />
         </>
       ) : (

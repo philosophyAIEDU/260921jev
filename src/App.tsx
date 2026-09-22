@@ -1,5 +1,10 @@
 import { useRef, useState } from "react";
 import { ApiKeyProvider, useApiKeys } from "./lib/apiKeyContext";
+import { GmailAuthProvider, useGmailAuth } from "./lib/gmail/gmailAuthContext";
+import { sendGmailMessage } from "./lib/api/gmailClient";
+import { buildEmailSubject, canSendEmail } from "./lib/api/emailCompose";
+import { isValidEmail } from "./types/inquiry";
+import { runPool } from "./lib/api/concurrency";
 import { Header, type AppMode } from "./components/Header";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { UploadStep } from "./features/upload/UploadStep";
@@ -15,15 +20,18 @@ import { DEFAULT_SETTINGS, type AppSettings } from "./types/settings";
 import type { InquiryRecord } from "./types/pipeline";
 import type { ParsedInquiry } from "./types/inquiry";
 import { runPipeline } from "./lib/api/pipelineRunner";
+import { AnalysisCache } from "./lib/api/analysisCache";
 import { callGeminiReply } from "./lib/api/geminiClient";
 import { buildGeminiContext } from "./types/gemini";
 import { AppApiError } from "./lib/api/apiErrors";
+import { useReplyTemplates } from "./lib/useReplyTemplates";
 
 type Step = "upload" | "preview" | "workspace";
 type LearningView = "main" | "practice" | "quiz";
 
 function AppInner() {
   const { hasBothKeys, jevApiKey, geminiApiKey } = useApiKeys();
+  const gmail = useGmailAuth();
   const [mode, setMode] = useState<AppMode>("ops");
   const [learningView, setLearningView] = useState<LearningView>("main");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -32,6 +40,7 @@ function AppInner() {
   const [showLearningSuggestion, setShowLearningSuggestion] = useState(true);
 
   const workflow = useFileWorkflow();
+  const { templates, addTemplate, removeTemplate } = useReplyTemplates();
 
   const [records, setRecords] = useState<InquiryRecord[]>([]);
   const [pendingInquiries, setPendingInquiries] = useState<ParsedInquiry[]>([]);
@@ -39,6 +48,7 @@ function AppInner() {
   const [generateReplies, setGenerateReplies] = useState(true);
   const [regeneratingKey, setRegeneratingKey] = useState<string | null>(null);
   const abortedRef = useRef(false);
+  const cacheRef = useRef(new AnalysisCache());
 
   function updateRecord(rowKey: string, patch: Partial<InquiryRecord>) {
     setRecords((prev) =>
@@ -57,6 +67,8 @@ function AppInner() {
       concurrency: 3,
       isAborted: () => abortedRef.current,
       onUpdate: updateRecord,
+      cache: cacheRef.current,
+      autoSend: { enabled: settings.autoSendEmail, accessToken: gmail.accessToken },
     });
     setRunning(false);
   }
@@ -135,10 +147,57 @@ function AppInner() {
     }
   }
 
+  async function sendEmailForRecord(rowKey: string): Promise<void> {
+    const record = records.find((r) => r.inquiry.rowKey === rowKey);
+    if (!record) return;
+    if (!gmail.accessToken) {
+      updateRecord(rowKey, { emailSendStatus: "failed", emailError: "Google 계정이 연결되어 있지 않습니다. 설정에서 연결해 주세요." });
+      return;
+    }
+    if (!isValidEmail(record.inquiry.customer_email)) {
+      updateRecord(rowKey, { emailSendStatus: "failed", emailError: "고객 이메일 주소가 없거나 형식이 올바르지 않습니다." });
+      return;
+    }
+    if (!canSendEmail(record)) {
+      updateRecord(rowKey, { emailSendStatus: "failed", emailError: "발송할 답변 내용이 없습니다." });
+      return;
+    }
+
+    updateRecord(rowKey, { emailSendStatus: "sending", emailError: undefined });
+    try {
+      await sendGmailMessage({
+        accessToken: gmail.accessToken,
+        to: record.inquiry.customer_email,
+        subject: buildEmailSubject(settings.brandName, record),
+        body: record.editedReply ?? record.geminiReply?.reply ?? "",
+      });
+      updateRecord(rowKey, {
+        emailSendStatus: "sent",
+        emailSentAt: new Date().toISOString(),
+        approval: "approved",
+      });
+    } catch (err) {
+      const message = err instanceof AppApiError ? err.message : "이메일 발송에 실패했습니다.";
+      updateRecord(rowKey, { emailSendStatus: "failed", emailError: message });
+    }
+  }
+
+  async function bulkSendEmail(rowKeys: string[]): Promise<void> {
+    const targets = rowKeys.filter((key) => {
+      const record = records.find((r) => r.inquiry.rowKey === key);
+      return record && isValidEmail(record.inquiry.customer_email) && canSendEmail(record);
+    });
+    await runPool(targets, (rowKey) => sendEmailForRecord(rowKey), {
+      concurrency: 3,
+      isAborted: () => false,
+    });
+  }
+
   function backToUpload() {
     setStep("upload");
     setRecords([]);
     setPendingInquiries([]);
+    cacheRef.current = new AnalysisCache();
     workflow.reset();
   }
 
@@ -205,6 +264,7 @@ function AppInner() {
                 {mode === "learning" && <ProbConfidenceDemo />}
                 <WorkspacePage
                   mode={mode}
+                  settings={settings}
                   records={records}
                   running={running}
                   pendingCount={pendingInquiries.length}
@@ -217,6 +277,16 @@ function AppInner() {
                   onEditReply={(rowKey, text) => updateRecord(rowKey, { editedReply: text })}
                   onEditMemo={(rowKey, text) => updateRecord(rowKey, { internalMemo: text })}
                   onSetApproval={(rowKey, approval) => updateRecord(rowKey, { approval })}
+                  onBulkSetApproval={(rowKeys, approval) =>
+                    setRecords((prev) =>
+                      prev.map((r) => (rowKeys.includes(r.inquiry.rowKey) ? { ...r, approval } : r))
+                    )
+                  }
+                  onSetAssignee={(rowKey, assignee) => updateRecord(rowKey, { assignee })}
+                  templates={templates}
+                  gmailConnected={gmail.isConnected}
+                  onSendEmail={sendEmailForRecord}
+                  onBulkSendEmail={bulkSendEmail}
                 />
               </>
             )}
@@ -225,7 +295,14 @@ function AppInner() {
       </main>
 
       {settingsOpen && (
-        <SettingsPanel settings={settings} onChange={setSettings} onClose={() => setSettingsOpen(false)} />
+        <SettingsPanel
+          settings={settings}
+          onChange={setSettings}
+          onClose={() => setSettingsOpen(false)}
+          templates={templates}
+          onAddTemplate={addTemplate}
+          onRemoveTemplate={removeTemplate}
+        />
       )}
     </div>
   );
@@ -256,7 +333,9 @@ function LearningNav({
 export default function App() {
   return (
     <ApiKeyProvider>
-      <AppInner />
+      <GmailAuthProvider>
+        <AppInner />
+      </GmailAuthProvider>
     </ApiKeyProvider>
   );
 }

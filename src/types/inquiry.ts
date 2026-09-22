@@ -5,6 +5,7 @@ export interface RawInquiryRow {
   received_at?: string;
   channel?: string;
   customer_name?: string;
+  customer_email?: string;
   order_id?: string;
   inquiry_text: string;
   language?: string;
@@ -23,6 +24,7 @@ export interface ColumnMapping {
   received_at: string | null;
   channel: string | null;
   customer_name: string | null;
+  customer_email: string | null;
   order_id: string | null;
   inquiry_text: string | null;
   language: string | null;
@@ -47,6 +49,7 @@ export const COLUMN_NAME_CANDIDATES: Record<keyof ColumnMapping, string[]> = {
   received_at: ["received_at", "접수일시", "날짜", "접수일"],
   channel: ["channel", "채널"],
   customer_name: ["customer_name", "고객명", "이름"],
+  customer_email: ["customer_email", "이메일", "고객이메일", "email", "e-mail"],
   order_id: ["order_id", "주문번호"],
   inquiry_text: [
     "inquiry_text",
@@ -58,3 +61,9 @@ export const COLUMN_NAME_CANDIDATES: Record<keyof ColumnMapping, string[]> = {
   ],
   language: ["language", "언어"],
 };
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export function isValidEmail(value: string | undefined): value is string {
+  return typeof value === "string" && EMAIL_PATTERN.test(value.trim());
+}

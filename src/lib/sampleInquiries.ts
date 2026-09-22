@@ -34,15 +34,17 @@ export const SAMPLE_INQUIRIES: SampleInquiry[] = [
 ];
 
 export function buildSampleCsv(): string {
-  const header = "inquiry_id,received_at,channel,customer_name,order_id,inquiry_text";
+  const header = "inquiry_id,received_at,channel,customer_name,customer_email,order_id,inquiry_text";
   const rows = SAMPLE_INQUIRIES.map((s, i) => {
     const id = `INQ-${1000 + i}`;
     const date = "2026-09-1" + i;
     const channel = ["이메일", "채팅", "전화", "게시판", "채팅"][i % 5];
     const name = `고객${i + 1}`;
+    // example.com은 IANA가 예시 용도로 예약해 둔 도메인입니다 (실제 메일이 가지 않음)
+    const email = `customer${i + 1}@example.com`;
     const order = `ORD-${20000 + i}`;
     const text = s.text.replace(/"/g, '""');
-    return `${id},${date},${channel},${name},${order},"${text}"`;
+    return `${id},${date},${channel},${name},${email},${order},"${text}"`;
   });
   return [header, ...rows].join("\n");
 }
