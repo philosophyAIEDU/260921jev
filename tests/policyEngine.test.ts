@@ -10,7 +10,7 @@ function buildResult(overrides: Partial<NormalizedJevResult> = {}): NormalizedJe
     is_urgent: 0.1,
     needs_human_review: 0.1,
     needs_reply: 1,
-    severity: { score: 1, confidence: 0.9, probabilities: [0.1, 0.6, 0.2, 0.1], maxStage: 3 },
+    severity: { score: 1, confidence: 0.9, probabilities: [0.1, 0.6, 0.2, 0.1], legend: [], maxStage: 3 },
     ...overrides,
   };
 }

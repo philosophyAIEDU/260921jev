@@ -45,11 +45,16 @@ export function InquiryTable({
               <td style={{ maxWidth: 280 }}>{r.inquiry.inquiry_text.slice(0, 60)}</td>
               <td>{r.jevResult ? labelFor(r.jevResult.category.choice) : "-"}</td>
               <td>{r.jevResult ? labelFor(r.jevResult.sentiment.choice) : "-"}</td>
-              <td>{r.jevResult ? `${(r.jevResult.is_urgent * 100).toFixed(0)}%` : "-"}</td>
-              <td>{r.jevResult ? r.jevResult.severity.score.toFixed(2) : "-"}</td>
-              <td>{r.jevResult ? `${(r.jevResult.category.confidence * 100).toFixed(0)}%` : "-"}</td>
+              <td className="tabular-nums">{r.jevResult ? `${(r.jevResult.is_urgent * 100).toFixed(0)}%` : "-"}</td>
+              <td className="tabular-nums">{r.jevResult ? r.jevResult.severity.score.toFixed(2) : "-"}</td>
+              <td className="tabular-nums">{r.jevResult ? `${(r.jevResult.category.confidence * 100).toFixed(0)}%` : "-"}</td>
               <td>
                 <StatusBadge status={r.status} />
+                {r.status === "failed" && r.errorMessage && (
+                  <div className="text-muted" style={{ fontSize: 11, marginTop: 2, maxWidth: 220 }}>
+                    {r.errorMessage}
+                  </div>
+                )}
               </td>
             </tr>
           ))}

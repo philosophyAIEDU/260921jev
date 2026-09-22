@@ -1,4 +1,4 @@
-import { SettingsIcon } from "./icons";
+import { BrandMarkIcon, SettingsIcon } from "./icons";
 
 export type AppMode = "ops" | "learning";
 
@@ -12,8 +12,13 @@ export function Header({ mode, onModeChange, onOpenSettings }: HeaderProps) {
   return (
     <header className="app-header">
       <div className="app-header__brand">
-        <div className="app-header__title">Jev Smart Desk</div>
-        <div className="app-header__subtitle">고객 문의 자동 분류 및 맞춤 답변</div>
+        <span className="app-header__mark">
+          <BrandMarkIcon />
+        </span>
+        <div className="app-header__text">
+          <div className="app-header__title">Jev Smart Desk</div>
+          <div className="app-header__subtitle">고객 문의 자동 분류 및 맞춤 답변</div>
+        </div>
       </div>
       <div className="app-header__actions">
         <div className="mode-toggle" role="tablist" aria-label="화면 모드 전환">

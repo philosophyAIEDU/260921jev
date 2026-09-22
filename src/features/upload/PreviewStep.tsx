@@ -1,7 +1,10 @@
+import { useEffect, useState } from "react";
 import type { ColumnMapping } from "../../types/inquiry";
 import type { ParsedInquiry } from "../../types/inquiry";
 import { AlertTriangleIcon } from "../../components/icons";
 import type { PdfSplitMode } from "../../lib/fileParsers/pdfParser";
+
+const LIMIT_PRESETS = [10, 20, 50, 100];
 
 const MAPPING_FIELDS: { key: keyof ColumnMapping; label: string; required?: boolean }[] = [
   { key: "inquiry_text", label: "고객 문의 내용", required: true },
@@ -17,7 +20,7 @@ interface PreviewStepProps {
   workflow: ReturnType<typeof import("./useFileWorkflow").useFileWorkflow>;
   parsedInquiries: ParsedInquiry[];
   usableInquiries: ParsedInquiry[];
-  onStartAnalysis: (withReplies: boolean) => void;
+  onStartAnalysis: (withReplies: boolean, limit: number) => void;
   onBack: () => void;
   hasBothKeys: boolean;
 }
@@ -37,6 +40,16 @@ export function PreviewStep({
   const overLimit = usableInquiries.length < parsedInquiries.filter((r) => !r.isEmpty).length;
 
   const mappingComplete = state.mapping?.inquiry_text != null;
+
+  // API 비용 절감을 위해 기본값은 전체가 아니라 20건(또는 그보다 적으면 전체)로 시작한다.
+  const [analysisLimit, setAnalysisLimit] = useState(() => Math.min(20, usableInquiries.length || 20));
+  useEffect(() => {
+    setAnalysisLimit((prev) => (prev > 0 ? Math.min(prev, usableInquiries.length) : Math.min(20, usableInquiries.length)));
+    // usableInquiries가 새 파일 로드로 바뀔 때만 재조정
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [usableInquiries.length]);
+
+  const effectiveLimit = Math.max(0, Math.min(analysisLimit, usableInquiries.length));
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -171,17 +184,60 @@ export function PreviewStep({
       <div className="card">
         <h2 className="card-title">분석 시작</h2>
         <p className="card-subtitle">
-          분석을 시작하기 전에 예상 API 호출 수를 확인하세요. 파일을 올리는 즉시 자동으로
-          호출되지 않습니다.
+          분석을 시작하기 전에 처리할 건수와 예상 API 호출 수를 확인하세요. 파일을 올리는 즉시
+          자동으로 호출되지 않으며, API 비용을 아끼려면 일부만 먼저 테스트해 보고 이어서
+          분석할 수 있습니다.
         </p>
+
+        <div className="form-row">
+          <label>이번에 분석할 건수</label>
+          <div className="pill-select" style={{ marginBottom: 8 }}>
+            {LIMIT_PRESETS.filter((n) => n <= usableInquiries.length).map((n) => (
+              <button
+                key={n}
+                type="button"
+                className={analysisLimit === n ? "is-active" : ""}
+                onClick={() => setAnalysisLimit(n)}
+              >
+                {n}건
+              </button>
+            ))}
+            <button
+              type="button"
+              className={analysisLimit === usableInquiries.length ? "is-active" : ""}
+              onClick={() => setAnalysisLimit(usableInquiries.length)}
+            >
+              전체 ({usableInquiries.length}건)
+            </button>
+          </div>
+          <div className="key-input-row" style={{ maxWidth: 220 }}>
+            <div>
+              <input
+                type="number"
+                min={1}
+                max={usableInquiries.length}
+                value={analysisLimit}
+                onChange={(e) => setAnalysisLimit(Number(e.target.value))}
+              />
+            </div>
+            <span className="form-hint">직접 입력 (최대 {usableInquiries.length}건)</span>
+          </div>
+          {effectiveLimit < usableInquiries.length && (
+            <div className="form-hint">
+              나머지 {usableInquiries.length - effectiveLimit}건은 분석 화면에서 "다음 N건 이어서
+              분석"으로 계속 처리할 수 있습니다.
+            </div>
+          )}
+        </div>
+
         <div className="grid grid-2" style={{ marginBottom: 14 }}>
           <div className="stat-tile">
             <div className="stat-tile__label">예상 Jev 호출 수</div>
-            <div className="stat-tile__value">{usableInquiries.length}</div>
+            <div className="stat-tile__value">{effectiveLimit}</div>
           </div>
           <div className="stat-tile">
             <div className="stat-tile__label">예상 Gemini 호출 수 (최대)</div>
-            <div className="stat-tile__value">{usableInquiries.length}</div>
+            <div className="stat-tile__value">{effectiveLimit}</div>
           </div>
         </div>
         {!hasBothKeys && (
@@ -197,18 +253,18 @@ export function PreviewStep({
           <button
             type="button"
             className="btn btn-secondary"
-            disabled={!mappingComplete || usableInquiries.length === 0 || !hasBothKeys}
-            onClick={() => onStartAnalysis(false)}
+            disabled={!mappingComplete || effectiveLimit === 0 || !hasBothKeys}
+            onClick={() => onStartAnalysis(false, effectiveLimit)}
           >
-            Jev 분석만 실행
+            Jev 분석만 실행 ({effectiveLimit}건)
           </button>
           <button
             type="button"
             className="btn btn-primary"
-            disabled={!mappingComplete || usableInquiries.length === 0 || !hasBothKeys}
-            onClick={() => onStartAnalysis(true)}
+            disabled={!mappingComplete || effectiveLimit === 0 || !hasBothKeys}
+            onClick={() => onStartAnalysis(true, effectiveLimit)}
           >
-            Jev 분석 + Gemini 답변 생성
+            Jev 분석 + Gemini 답변 생성 ({effectiveLimit}건)
           </button>
         </div>
       </div>

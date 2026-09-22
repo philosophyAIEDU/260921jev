@@ -107,7 +107,8 @@ async function callGeminiApi(
       generationConfig: {
         responseMimeType: "application/json",
         responseSchema: GEMINI_RESPONSE_SCHEMA,
-        temperature: 0.4,
+        // gemini-3.5-flash-lite는 temperature/topK/topP 커스텀 값을 지원하지 않는다
+        // (설정 시 무시되거나 모델에 따라 오류가 날 수 있어 전달하지 않는다)
       },
     }),
   });

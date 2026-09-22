@@ -40,19 +40,25 @@ export interface JevRequestBody {
 // --- Jev 원본 응답 (API가 실제로 돌려주는 형태) ---
 
 export interface JevNoulAnswerRaw {
+  type?: "noul";
   noul: number;
 }
 
 export interface JevChoiceAnswerRaw {
+  type?: "choice";
   choice: string;
   confidence: number;
   probabilities: Record<string, number>;
 }
 
 export interface JevScoreAnswerRaw {
+  type?: "score";
   score: number;
   confidence: number;
-  probabilities: number[];
+  /** 실제 API는 단계 인덱스를 키로 갖는 객체({"0":0.1,"1":0.9})를 반환한다 */
+  probabilities: Record<string, number> | number[];
+  /** 단계 인덱스 → 사용자가 정의한 단계 설명 */
+  legend?: Record<string, string>;
 }
 
 export interface JevAnswersRaw {
@@ -102,7 +108,10 @@ export interface NormalizedChoice<T extends string = string> {
 export interface NormalizedScore {
   score: number;
   confidence: number;
+  /** 단계 순서대로 정렬된 확률 배열 */
   probabilities: number[];
+  /** 단계 순서대로 정렬된 단계 설명 (API가 legend를 주지 않으면 빈 배열) */
+  legend: string[];
   maxStage: number;
 }
 

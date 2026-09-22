@@ -28,6 +28,7 @@
   padding: 18px;
   border: 1px solid var(--border-subtle);
   background: var(--bg-card);
+  box-shadow: var(--shadow-card);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -204,6 +205,7 @@
   flex-shrink: 0;
   font-weight: 700;
   color: var(--forest-900);
+  font-variant-numeric: tabular-nums;
 }
 
 .explain-callout {

@@ -18,7 +18,14 @@ function buildRawResponse(overrides: Partial<JevResponseRaw["answers"]> = {}): J
       is_urgent: { noul: 0.15 },
       needs_human_review: { noul: 0.2 },
       needs_reply: { noul: 1 },
-      severity: { score: 1.2, confidence: 0.65, probabilities: [0.1, 0.5, 0.3, 0.1] },
+      // 실제 TypeSafe Jev API는 score의 probabilities를 배열이 아니라
+      // 단계 인덱스를 키로 갖는 객체로 반환한다 ("0", "1", "2"...).
+      severity: {
+        score: 1.2,
+        confidence: 0.65,
+        probabilities: { "0": 0.1, "1": 0.5, "2": 0.3, "3": 0.1 },
+        legend: { "0": "문제 없음", "1": "일반 문의", "2": "실제 불편", "3": "심각한 피해" },
+      },
       ...overrides,
     },
   } as JevResponseRaw;
@@ -32,8 +39,13 @@ describe("normalizeJevResponse - Noul 정규화", () => {
     expect(result.needs_reply).toBe(1);
   });
 
-  it("noul 값이 범위를 벗어나면 오류를 던진다", () => {
+  it("noul 값이 범위를 벗어나도 오류 대신 0~1로 보정한다", () => {
     const raw = buildRawResponse({ is_urgent: { noul: 1.5 } });
+    expect(normalizeJevResponse(raw).is_urgent).toBe(1);
+  });
+
+  it("noul 필드 자체가 없으면 오류를 던진다", () => {
+    const raw = buildRawResponse({ is_urgent: {} as never });
     expect(() => normalizeJevResponse(raw)).toThrow(JevResponseFormatError);
   });
 });
@@ -46,21 +58,41 @@ describe("normalizeJevResponse - Choice 정규화", () => {
     expect(result.category.probabilities.other).toBe(0.18);
   });
 
-  it("허용되지 않은 choice 값이면 오류를 던진다", () => {
+  it("사전에 정의하지 않은 choice 값이 와도 행 전체를 실패시키지 않는다", () => {
+    // 모델이 향후 새 카테고리를 추가하는 등 스펙이 조금 달라져도
+    // 전체 분석이 실패하지 않도록, 알 수 없는 choice는 그대로 통과시킨다.
     const raw = buildRawResponse({
-      category: { choice: "invalid_category", confidence: 0.5, probabilities: {} },
+      category: { choice: "logistics_new", confidence: 0.5, probabilities: { logistics_new: 0.5 } },
+    });
+    const result = normalizeJevResponse(raw);
+    expect(result.category.choice).toBe("logistics_new");
+  });
+
+  it("choice 필드가 비어 있으면 오류를 던진다", () => {
+    const raw = buildRawResponse({
+      category: { choice: "", confidence: 0.5, probabilities: {} },
     });
     expect(() => normalizeJevResponse(raw)).toThrow(JevResponseFormatError);
   });
 });
 
 describe("normalizeJevResponse - Score 정규화", () => {
-  it("score, confidence, probabilities, maxStage를 구조화한다", () => {
+  it("객체 형태(probabilities: {0:.., 1:..})의 실제 API 응답을 정규화한다", () => {
     const result = normalizeJevResponse(buildRawResponse());
     expect(result.severity.score).toBe(1.2);
     expect(result.severity.confidence).toBe(0.65);
     expect(result.severity.probabilities).toEqual([0.1, 0.5, 0.3, 0.1]);
+    expect(result.severity.legend).toEqual(["문제 없음", "일반 문의", "실제 불편", "심각한 피해"]);
     expect(result.severity.maxStage).toBe(3);
+  });
+
+  it("배열 형태의 probabilities도 계속 지원한다", () => {
+    const raw = buildRawResponse({
+      severity: { score: 2, confidence: 0.5, probabilities: [0.1, 0.2, 0.3, 0.4] },
+    });
+    const result = normalizeJevResponse(raw);
+    expect(result.severity.probabilities).toEqual([0.1, 0.2, 0.3, 0.4]);
+    expect(result.severity.legend).toEqual([]);
   });
 
   it("answers 필드가 없으면 오류를 던진다", () => {

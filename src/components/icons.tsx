@@ -83,6 +83,20 @@ export function XCircleIcon(props: IconProps) {
   );
 }
 
+export function BrandMarkIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" width="19" height="19" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M6 12a6 6 0 1 0 6-6"
+        stroke="currentColor"
+        strokeWidth="2.1"
+        strokeLinecap="round"
+      />
+      <circle cx="12" cy="12" r="2.3" fill="currentColor" />
+    </svg>
+  );
+}
+
 export function SettingsIcon(props: IconProps) {
   return (
     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true" {...props}>

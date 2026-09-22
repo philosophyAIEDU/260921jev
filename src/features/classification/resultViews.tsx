@@ -90,7 +90,7 @@ export function ScoreResultView({ label, result }: { label: string; result: Norm
       </div>
       {result.probabilities.map((value, i) => (
         <div className="prob-bar-row" key={i}>
-          <span className="prob-bar-row__label">단계 {i}</span>
+          <span className="prob-bar-row__label">{result.legend[i] ?? `단계 ${i}`}</span>
           <span className="prob-bar-row__track">
             <span className="prob-bar-row__fill score" style={{ width: `${value * 100}%` }} />
           </span>

@@ -24,7 +24,7 @@ function buildRecord(): InquiryRecord {
       is_urgent: 0.3,
       needs_human_review: 0.2,
       needs_reply: 1,
-      severity: { score: 1.4, confidence: 0.75, probabilities: [0.1, 0.4, 0.4, 0.1], maxStage: 3 },
+      severity: { score: 1.4, confidence: 0.75, probabilities: [0.1, 0.4, 0.4, 0.1], legend: [], maxStage: 3 },
     },
     geminiReply: {
       reply: "불편을 드려 죄송합니다. 주문번호를 확인해 조치하겠습니다.",

@@ -13,6 +13,7 @@ import { PracticePage } from "./features/learning/PracticePage";
 import { QuizSection } from "./features/learning/QuizSection";
 import { DEFAULT_SETTINGS, type AppSettings } from "./types/settings";
 import type { InquiryRecord } from "./types/pipeline";
+import type { ParsedInquiry } from "./types/inquiry";
 import { runPipeline } from "./lib/api/pipelineRunner";
 import { callGeminiReply } from "./lib/api/geminiClient";
 import { buildGeminiContext } from "./types/gemini";
@@ -33,6 +34,7 @@ function AppInner() {
   const workflow = useFileWorkflow();
 
   const [records, setRecords] = useState<InquiryRecord[]>([]);
+  const [pendingInquiries, setPendingInquiries] = useState<ParsedInquiry[]>([]);
   const [running, setRunning] = useState(false);
   const [generateReplies, setGenerateReplies] = useState(true);
   const [regeneratingKey, setRegeneratingKey] = useState<string | null>(null);
@@ -44,18 +46,10 @@ function AppInner() {
     );
   }
 
-  async function startAnalysis(withReplies: boolean) {
-    const initial: InquiryRecord[] = workflow.usableInquiries.map((inquiry) => ({
-      inquiry,
-      status: "waiting",
-      approval: "pending",
-    }));
-    setRecords(initial);
-    setGenerateReplies(withReplies);
-    setStep("workspace");
+  async function runBatch(batch: InquiryRecord[], withReplies: boolean) {
     abortedRef.current = false;
     setRunning(true);
-    await runPipeline(initial, {
+    await runPipeline(batch, {
       jevApiKey,
       geminiApiKey,
       settings,
@@ -67,6 +61,40 @@ function AppInner() {
     setRunning(false);
   }
 
+  // limit: API 비용을 아끼기 위해 사용자가 이번에 처리할 건수를 직접 고른다.
+  // 전체 usableInquiries 중 limit만큼만 즉시 분석하고 나머지는 pendingInquiries에 보관해
+  // "다음 N건 이어서 분석"으로 나중에 이어갈 수 있게 한다.
+  async function startAnalysis(withReplies: boolean, limit: number) {
+    const all = workflow.usableInquiries;
+    const firstBatch = all.slice(0, limit);
+    const rest = all.slice(limit);
+
+    const initial: InquiryRecord[] = firstBatch.map((inquiry) => ({
+      inquiry,
+      status: "waiting",
+      approval: "pending",
+    }));
+    setRecords(initial);
+    setPendingInquiries(rest);
+    setGenerateReplies(withReplies);
+    setStep("workspace");
+    await runBatch(initial, withReplies);
+  }
+
+  async function continueAnalysis(limit: number) {
+    const nextBatch = pendingInquiries.slice(0, limit);
+    if (nextBatch.length === 0) return;
+    setPendingInquiries((prev) => prev.slice(limit));
+
+    const newRecords: InquiryRecord[] = nextBatch.map((inquiry) => ({
+      inquiry,
+      status: "waiting",
+      approval: "pending",
+    }));
+    setRecords((prev) => [...prev, ...newRecords]);
+    await runBatch(newRecords, generateReplies);
+  }
+
   function abort() {
     abortedRef.current = true;
   }
@@ -75,21 +103,10 @@ function AppInner() {
     const failed = records.filter((r) => r.status === "failed");
     if (failed.length === 0) return;
     failed.forEach((r) => updateRecord(r.inquiry.rowKey, { status: "waiting", errorMessage: undefined }));
-    abortedRef.current = false;
-    setRunning(true);
-    await runPipeline(
+    await runBatch(
       failed.map((r) => ({ ...r, status: "waiting" as const })),
-      {
-        jevApiKey,
-        geminiApiKey,
-        settings,
-        generateReplies,
-        concurrency: 3,
-        isAborted: () => abortedRef.current,
-        onUpdate: updateRecord,
-      }
+      generateReplies
     );
-    setRunning(false);
   }
 
   async function regenerateReply(rowKey: string) {
@@ -121,6 +138,7 @@ function AppInner() {
   function backToUpload() {
     setStep("upload");
     setRecords([]);
+    setPendingInquiries([]);
     workflow.reset();
   }
 
@@ -189,6 +207,8 @@ function AppInner() {
                   mode={mode}
                   records={records}
                   running={running}
+                  pendingCount={pendingInquiries.length}
+                  onContinueAnalysis={continueAnalysis}
                   onAbort={abort}
                   onRetryFailed={retryFailed}
                   onBackToUpload={backToUpload}
